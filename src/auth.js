@@ -1,9 +1,11 @@
 const jwt = require('jsonwebtoken');
 
+/*
 const users = [ // Usuarios registrados para uso del programa
   { username: 'admin', password: 'password' },
   { username: 'sergio', password: 'sergio' }
 ];
+*/
 
 const authenticateUser = (username, password) => { // Consulta de usuarios registrados 
   return users.find(user => user.username === username && user.password === password);
