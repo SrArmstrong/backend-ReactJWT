@@ -32,7 +32,13 @@ async function authenticateUser(username, password) { // Conexión y comparació
         return null;
     }
 
-    return userData;
+    return {
+        username: userData.username,
+        email: userData.email,
+        role: userData.role,
+        created_at: userData.created_at,
+        last_login: userData.last_login
+    };
 }
 
 app.post('/login', async (req, res) => {
@@ -48,6 +54,7 @@ app.post('/login', async (req, res) => {
     }
 
     const token = generateToken(username);
+
     const lastLoginTime = admin.firestore.Timestamp.now();
 
 
@@ -60,7 +67,12 @@ app.post('/login', async (req, res) => {
       return res.status(200).json({
         statusCode: 200,
         intDataMessage: [{ token: token }],
-        last_login: lastLoginTime.seconds
+        userInfo: {
+            username: user.username,
+            email: user.email,
+            role: user.role,
+            created_at: user.created_at,
+            last_login: lastLoginTime.seconds}
       });
 
     } catch (error) {
@@ -72,36 +84,50 @@ app.post('/login', async (req, res) => {
 
 
 app.post('/register', async (req, res) => {
-  const { username, email, password, role } = req.body;
-
-  if (!username || !email || !password || !role) {
-      return res.status(400).json({ statusCode: 400, message: 'Todos los campos son requeridos' });
-  }
-
-  try {
-      const userRef = db.collection('USERS').doc(username);
-      const doc = await userRef.get();
-
-      if (doc.exists) {
-          return res.status(400).json({ statusCode: 400, message: 'El usuario ya existe' });
-      }
-
-      const saltRounds = 10;
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-      await userRef.set({
-          username,
-          email,
-          password: hashedPassword,
-          role,
-          last_login: null
-      });
-
-      return res.status(201).json({ statusCode: 201, message: 'Usuario registrado exitosamente' });
-  } catch (error) {
-      return res.status(500).json({ statusCode: 500, message: 'Error en el servidor', error: error.message });
-  }
-});
+    const { username, email, password, role } = req.body;
+  
+    if (!username || !email || !password || !role) {
+        return res.status(400).json({ statusCode: 400, message: 'Todos los campos son requeridos' });
+    }
+  
+    try {
+        const userRef = db.collection('USERS').doc(username);
+        const doc = await userRef.get();
+  
+        if (doc.exists) {
+            return res.status(400).json({ statusCode: 400, message: 'El usuario ya existe' });
+        }
+  
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+  
+        await userRef.set({
+            username,
+            email,
+            password: hashedPassword,
+            role,
+            last_login: null
+        });
+  
+        // Definir los permisos según el rol
+        let permissions = [];
+        if (role === 'admin') {
+            permissions = ['getUsers', 'deleteUsers', 'updateUsers', 'updateRol', 'addRol', 'deleteRol', 'addPermission', 'deletePermission'];
+        } else if (role === 'user') {
+            permissions = ['updateUsers', 'getUsers'];
+        }
+  
+        const roleRef = db.collection('ROLES').doc(`${username}_${email}`);
+        await roleRef.set({
+            role,
+            permissions
+        });        
+  
+        return res.status(201).json({ statusCode: 201, message: 'Usuario registrado exitosamente' });
+    } catch (error) {
+        return res.status(500).json({ statusCode: 500, message: 'Error en el servidor', error: error.message });
+    }
+  });
 
 const PORT = process.env.PORT || 5000;
 
