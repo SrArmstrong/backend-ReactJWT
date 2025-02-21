@@ -63,20 +63,24 @@ const authenticateToken = (req, res, next) => {
 const authorizePermission = (requiredPermission) => {
     return async (req, res, next) => {
         try {
-            // Obtener el rol del usuario desde la solicitud
-            const userRole = req.user.role;
-
-            // Buscar los permisos en la colección ROLES donde el nombre del documento sea el mismo que el rol
-            const roleDoc = await db.collection('ROLES').doc(userRole).get();
-
-            if (!roleDoc.exists) {
-                return res.status(403).json({ statusCode: 403, message: 'Acceso denegado. El rol no tiene permisos asignados' });
+            // Verificar que req.user existe y tiene un username válido
+            if (!req.user || !req.user.username) {
+                return res.status(401).json({ statusCode: 401, message: 'Acceso denegado. Usuario no autenticado' });
             }
 
-            const roleData = roleDoc.data();
+            const username = req.user.username; // El username es el identificador del documento en ROLES
+
+            // Buscar el usuario en la colección ROLES (donde el documento tiene el mismo nombre que el username)
+            const userDoc = await db.collection('ROLES').doc(username).get();
+
+            if (!userDoc.exists) {
+                return res.status(403).json({ statusCode: 403, message: 'Acceso denegado. Usuario no encontrado en ROLES' });
+            }
+
+            const userData = userDoc.data();
 
             // Verificar si el usuario tiene el permiso requerido
-            if (!roleData.permissions || !roleData.permissions.includes(requiredPermission)) {
+            if (!userData.permissions || !userData.permissions.includes(requiredPermission)) {
                 return res.status(403).json({ statusCode: 403, message: 'Acceso denegado. No tienes el permiso necesario' });
             }
 
@@ -85,15 +89,6 @@ const authorizePermission = (requiredPermission) => {
             return res.status(500).json({ message: 'Error al verificar permisos', error: error.message });
         }
     };
-};
-
-
-// Verificar si el usuario es admin
-const authorizeAdmin = (req, res, next) => {
-    if (req.user.role !== 'admin') {
-        return res.status(403).json({ statusCode: 403, message: 'Acceso denegado. Se requieren privilegios de administrador' });
-    }
-    next();
 };
 
 app.post('/login', async (req, res) => {
@@ -170,7 +165,7 @@ app.post('/register', async (req, res) => {
         // Definir los permisos según el rol
         let permissions = [];
         if (role === 'admin') {
-            permissions = ["getUsers", "getRoles", "deleteUsers", "updateUsers", "updateRol", "addRol", "deleteRol", "addPermission", "deletePermissions"];
+            permissions = ["getUsers", "getRoles", "deleteUsers", "updateUsers", "updateRol", "addRol", "deleteRol", "addPermissions", "deletePermissions"];
         } else if (role === 'user') {
             permissions = ['updateUsers'];
         }
@@ -270,7 +265,7 @@ app.delete('/deleteRol/:role',authenticateToken, authorizePermission('deleteRol'
 });
 
 // Agregar un permiso a un rol
-app.post('/addPermissions:/role',authenticateToken, authorizePermission('addPermissions'), async (req, res) => {
+app.post('/addPermissions/:role',authenticateToken, authorizePermission('addPermissions'), async (req, res) => {
     const { role, permission } = req.body;
     try {
         const roleRef = db.collection('ROLES').doc(role);
