@@ -195,12 +195,17 @@ app.get('/getUsers', authenticateToken, authorizePermission('getUsers'), async (
     }
 });
 
-// Obtener todos los usuarios
+// Obtener todos los roles
 app.get('/getRoles', authenticateToken, authorizePermission('getRoles'), async (req, res) => {
     try {
         const snapshot = await db.collection('ROLES').get();
-        const users = snapshot.docs.map(doc => doc.data());
-        return res.status(200).json(users);
+        const roles = snapshot.docs.map(doc => {
+            return {
+                id: doc.id, // Obtener el ID del documento
+                ...doc.data() // Obtener los datos del documento
+            };
+        });
+        return res.status(200).json(roles);
     } catch (error) {
         return res.status(500).json({ message: 'Error al obtener los roles', error: error.message });
     }
@@ -264,23 +269,39 @@ app.delete('/deleteRol/:role',authenticateToken, authorizePermission('deleteRol'
     }
 });
 
-// Agregar un permiso a un rol
-app.post('/addPermissions/:role',authenticateToken, authorizePermission('addPermissions'), async (req, res) => {
-    const { role, permission } = req.body;
+// Agregar un permiso a un rol usando req.body
+app.post('/addPermissions', authenticateToken, authorizePermission('addPermissions'), async (req, res) => {
+    const { role, permission } = req.body; // Obtiene los datos desde el cuerpo de la solicitud
+
+    console.log('Rol recibido:', role);
+    console.log('Permiso recibido:', permission);
+
+    if (!role || !permission) {
+        return res.status(400).json({ message: 'Se requiere el rol y el permiso' }); // Validación de datos
+    }
+
     try {
-        const roleRef = db.collection('ROLES').doc(role);
-        const roleDoc = await roleRef.get();
+        const roleRef = db.collection('ROLES').doc(role); // Referencia al documento del rol
+        const roleDoc = await roleRef.get(); // Obtiene el documento del rol
+
         if (!roleDoc.exists) {
             return res.status(404).json({ message: 'Rol no encontrado' });
         }
+
         const permissions = roleDoc.data().permissions || [];
+        if (permissions.includes(permission)) {
+            return res.status(400).json({ message: 'El permiso ya existe para este rol' });
+        }
+
         permissions.push(permission);
+
         await roleRef.update({ permissions });
         return res.status(200).json({ message: 'Permiso agregado exitosamente' });
     } catch (error) {
         return res.status(500).json({ message: 'Error al agregar permiso', error: error.message });
     }
 });
+
 
 // Eliminar un permiso de un rol
 app.delete('/deletePermissions/:role/:permission',authenticateToken, authorizePermission('deletePermissions'), async (req, res) => {
@@ -297,6 +318,17 @@ app.delete('/deletePermissions/:role/:permission',authenticateToken, authorizePe
         return res.status(200).json({ message: 'Permiso eliminado exitosamente' });
     } catch (error) {
         return res.status(500).json({ message: 'Error al eliminar permiso', error: error.message });
+    }
+});
+
+app.get('/getRoleIds', authenticateToken, authorizePermission('getRoles'), async (req, res) => {
+    try {
+        const snapshot = await db.collection('ROLES').get(); // Obtener todos los documentos de la colección ROLES
+        const roleIds = snapshot.docs.map(doc => doc.id); // Extraer solo los IDs de los documentos
+
+        return res.status(200).json(roleIds); // Devolver un array con los IDs
+    } catch (error) {
+        return res.status(500).json({ message: 'Error al obtener los IDs de los roles', error: error.message });
     }
 });
 
